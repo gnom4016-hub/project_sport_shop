@@ -1,10 +1,8 @@
 (function () {
   console.log("Виджет мониторинга цен успешно подключен :)");
 
-  // Функция для запроса обновленных данных с бэкенда
   async function fetchCompetitorPrice(article) {
     try {
-      // Запрос к твоему серверу на Render
       const response = await fetch(`https://project-sport-shop.onrender.com/update-prices?article=${article}`);
       const data = await response.text();
       return data;
@@ -14,29 +12,34 @@
     }
   }
 
-  // Пример интеграции в DOM страницы Tilda
   async function initWidget() {
-    // В зависимости от того, как устроена верстка в Тильде, находим нужный блок
-    const priceContainer = document.querySelector('.t-store__card__price'); 
-    
-    if (priceContainer) {
-      // Пример артикула (в реальности его можно читать из дата-атрибута товара)
-      const testArticle = "12345678"; 
-      
-      const result = await fetchCompetitorPrice(testArticle);
-      
-      if (result) {
-        // Создаем плашку с ценой конкурента
-        const badge = document.createElement('div');
-        badge.style.cssText = 'margin-top: 5px; font-size: 12px; color: #ff5500; font-weight: bold;';
-        badge.innerText = `Конкуренты (WB): ${result}`;
-        
-        priceContainer.appendChild(badge);
-      }
+    // Внимание: укажи здесь реальный артикул Wildberries для теста (например: 211605633)
+    const testArticle = "211605633"; 
+    const price = await fetchCompetitorPrice(testArticle);
+
+    // Ищем контейнер цены в Тильде или выводим плашку вверху страницы для теста
+    const targetElement = document.querySelector('.t-store__card__price') || document.body;
+
+    if (targetElement && price) {
+      const badge = document.createElement('div');
+      badge.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #000;
+        color: #fff;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-family: sans-serif;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        z-index: 999999;
+      `;
+      badge.innerText = `WB (арт. ${testArticle}): ${price}`;
+      document.body.appendChild(badge);
     }
   }
 
-  // Запускаем скрипт после полной загрузки страницы
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initWidget);
   } else {
