@@ -14,7 +14,7 @@
 
   async function initWidget() {
     // Внимание: укажи здесь реальный артикул Wildberries для теста (например: 211605633)
-    const testArticle = "211605633"; 
+    const testArticle = ""; 
     const price = await fetchCompetitorPrice(testArticle);
 
     // Ищем контейнер цены в Тильде или выводим плашку вверху страницы для теста
