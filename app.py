@@ -15,28 +15,30 @@ def serve_widget():
     return send_from_directory('static', 'widget.js')
 
 def get_competitor_price(article):
-    # Работающий API роут Wildberries
-    url = f"https://card.wb.ru/cards/v1/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm={article}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
-    }
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        art = int(article)
+        vol = art // 100000
+        part = art // 1000
         
-        if response.status_code != 200:
-            return f"Ошибка WB: статус {response.status_code}"
-            
-        data = response.json()
-        products = data.get('data', {}).get('products', [])
+        # Динамический адрес хранения карточки WB
+        url = f"https://basket-10.wbbasket.ru/vol{vol}/part{part}/{art}/info/price-history.json"
         
-        if products:
-            # Парсим итоговую цену с учетом скидки (в копейках)
-            price_raw = products[0].get('salePriceU') or products[0].get('priceU')
-            if price_raw:
-                return f"{price_raw // 100} ₽"
-                
+        # Если статический JSON не отдается, берем через общий API поиска карточки:
+        api_url = f"https://card.wb.ru/cards/v1/detail?appType=1&curr=rub&dest=-1257786&nm={article}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        res = requests.get(api_url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            products = data.get('data', {}).get('products', [])
+            if products:
+                price_raw = products[0].get('salePriceU') or products[0].get('priceU')
+                if price_raw:
+                    return f"{price_raw // 100} ₽"
+                    
         return "Товар не найден"
     except Exception as e:
         return f"Ошибка: {e}"
