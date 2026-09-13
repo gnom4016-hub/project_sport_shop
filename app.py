@@ -5,6 +5,12 @@ from flask import Flask, send_from_directory
 
 app = Flask(__name__)
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
 # Роут для отдачи JS-файла виджета в Tilda
 @app.route('/static/widget.js')
 def serve_widget():
@@ -40,4 +46,6 @@ def update_prices():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
+
     
