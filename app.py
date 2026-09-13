@@ -15,30 +15,37 @@ def serve_widget():
     return send_from_directory('static', 'widget.js')
 
 def get_competitor_price(article):
+    # Актуальный публичный API v2 Wildberries
+    url = f"https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm={article}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.9'
+    }
     try:
-        art = int(article)
-        vol = art // 100000
-        part = art // 1000
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return f"Ошибка WB ({response.status_code})"
+            
+        data = response.json()
+        products = data.get('data', {}).get('products', [])
         
-        # Динамический адрес хранения карточки WB
-        url = f"https://basket-10.wbbasket.ru/vol{vol}/part{part}/{art}/info/price-history.json"
-        
-        # Если статический JSON не отдается, берем через общий API поиска карточки:
-        api_url = f"https://card.wb.ru/cards/v1/detail?appType=1&curr=rub&dest=-1257786&nm={article}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        res = requests.get(api_url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            products = data.get('data', {}).get('products', [])
-            if products:
-                price_raw = products[0].get('salePriceU') or products[0].get('priceU')
+        if products:
+            product = products[0]
+            # В v2 цена берется из списка размеров (sizes)
+            sizes = product.get('sizes', [])
+            if sizes:
+                price_info = sizes[0].get('price', {})
+                # Берем цену с учетом СПП (product) или базовую (total)
+                price_raw = price_info.get('product') or price_info.get('total')
                 if price_raw:
                     return f"{price_raw // 100} ₽"
                     
+            # Резервный поиск по ключу цены в корне
+            price_raw = product.get('salePriceU') or product.get('priceU')
+            if price_raw:
+                return f"{price_raw // 100} ₽"
+                
         return "Товар не найден"
     except Exception as e:
         return f"Ошибка: {e}"
