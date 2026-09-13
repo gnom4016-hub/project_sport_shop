@@ -105,7 +105,12 @@ def get_competitor_price(article, timeout: int = 8, max_retries: int = 2):
                     try:
                         data = resp.json()
                     except ValueError:
-                        last_error = f"Невалидный JSON от {endpoint} (dest={dest})"
+                        snippet = resp.text[:200].replace("\n", " ")
+                        server_header = resp.headers.get("Server", "?")
+                        last_error = (
+                            f"Невалидный JSON от {endpoint} (dest={dest}, "
+                            f"status={resp.status_code}, server={server_header}): {snippet!r}"
+                        )
                         logger.info(last_error)
                         continue
 
