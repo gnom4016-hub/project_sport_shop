@@ -15,11 +15,10 @@ app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": "https://verbally-glowing-pine.tilda.ws"}})
 CORS(app)
 
-# Основные точки входа WB API (актуальны на момент написания, могут меняться)
+# ВАЖНО: v1, v2 и обычный /cards/detail отключены Wildberries — сейчас
+# рабочий только v4. Если WB снова сменит версию, чинить нужно здесь.
 WB_CARD_ENDPOINTS = [
-    "https://card.wb.ru/cards/v2/detail",
-    "https://card.wb.ru/cards/v1/detail",
-    "https://card.wb.ru/cards/detail",
+    "https://card.wb.ru/cards/v4/detail",
 ]
 
 DEFAULT_PARAMS = {
