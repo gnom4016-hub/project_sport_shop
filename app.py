@@ -37,7 +37,7 @@ HEADERS = {
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "Origin": "https://www.wildberries.ru",
     "Referer": "https://www.wildberries.ru/",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
 }
 
