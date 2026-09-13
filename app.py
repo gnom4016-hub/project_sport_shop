@@ -1,9 +1,19 @@
-import requests
-import time
-import random
 import logging
+import random
+import time
 
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import requests
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+# Разрешаем запросы с любого origin (в т.ч. с домена Tilda).
+# Если хотите сузить — замените "*" на конкретный домен сайта, например
+# CORS(app, resources={r"/*": {"origins": "https://verbally-glowing-pine.tilda.ws"}})
+CORS(app)
 
 # Основные точки входа WB API (актуальны на момент написания, могут меняться)
 WB_CARD_ENDPOINTS = [
@@ -12,12 +22,9 @@ WB_CARD_ENDPOINTS = [
     "https://card.wb.ru/cards/detail",
 ]
 
-# dest — код региона доставки. 123585668 = Москва (стандартный дефолт).
-# Если для вашего кейса важен конкретный регион — подставьте свой.
 DEFAULT_PARAMS = {
     "appType": 1,
     "curr": "rub",
-    "dest": -1257786,       # общий/дефолтный dest, работает в большинстве случаев
     "spp": 30,
 }
 
@@ -43,9 +50,7 @@ DEST_CANDIDATES = [-1257786, 123585668, -1216601, -5817441]
 def _parse_price_from_product(product: dict):
     """
     Извлекает цену из объекта товара.
-    WB хранит цену в копейках, в разных полях в зависимости от версии API:
-    - sizes[0].price.product / total
-    - salePriceU / priceU (устаревшие поля)
+    WB хранит цену в копейках, в разных полях в зависимости от версии API.
     """
     try:
         sizes = product.get("sizes")
@@ -57,7 +62,6 @@ def _parse_price_from_product(product: dict):
     except (KeyError, IndexError, TypeError):
         pass
 
-    # fallback на старые поля
     for field in ("salePriceU", "priceU"):
         val = product.get(field)
         if val:
@@ -69,17 +73,13 @@ def _parse_price_from_product(product: dict):
 def get_competitor_price(article, timeout: int = 8, max_retries: int = 2):
     """
     Получает актуальную цену товара Wildberries по артикулу.
-
-    :param article: артикул товара (int или str)
-    :param timeout: таймаут запроса в секундах
-    :param max_retries: количество повторных попыток при неудаче
-    :return: цена в рублях (int) или None, если не удалось получить
+    Возвращает (price, last_error): price — int или None.
     """
     try:
         article = int(str(article).strip())
     except (ValueError, TypeError):
         logger.warning(f"Некорректный артикул: {article!r}")
-        return None
+        return None, "invalid_article"
 
     session = requests.Session()
     session.headers.update(HEADERS)
@@ -99,17 +99,20 @@ def get_competitor_price(article, timeout: int = 8, max_retries: int = 2):
 
                     if resp.status_code != 200:
                         last_error = f"HTTP {resp.status_code} на {endpoint} (dest={dest})"
+                        logger.info(last_error)
                         continue
 
                     try:
                         data = resp.json()
                     except ValueError:
                         last_error = f"Невалидный JSON от {endpoint} (dest={dest})"
+                        logger.info(last_error)
                         continue
 
                     products = (data.get("data") or {}).get("products") or []
                     if not products:
                         last_error = f"Пустой products от {endpoint} (dest={dest})"
+                        logger.info(last_error)
                         continue
 
                     price = _parse_price_from_product(products[0])
@@ -118,28 +121,66 @@ def get_competitor_price(article, timeout: int = 8, max_retries: int = 2):
                             f"Цена для {article} получена: {price}₽ "
                             f"(endpoint={endpoint}, dest={dest})"
                         )
-                        return price
+                        return price, None
                     else:
                         last_error = f"Не найдено поле цены в ответе (dest={dest})"
+                        logger.info(last_error)
 
                 except requests.exceptions.Timeout:
                     last_error = f"Timeout на {endpoint} (dest={dest})"
+                    logger.warning(last_error)
                 except requests.exceptions.RequestException as e:
                     last_error = f"RequestException: {e}"
+                    logger.warning(last_error)
 
-        # небольшая пауза перед повтором, чтобы не словить rate-limit
         if attempt < max_retries:
             time.sleep(1 + random.random())
 
     logger.error(f"Не удалось получить цену для артикула {article}. Последняя ошибка: {last_error}")
-    return None
+    return None, last_error
 
 
-# Пример использования во Flask-роуте:
-#
-# @app.route("/price/<article>")
-# def price_route(article):
-#     price = get_competitor_price(article)
-#     if price is None:
-#         return jsonify({"error": "price not found"}), 404
-#     return jsonify({"article": article, "price": price, "display": f"{price} ₽"})
+@app.route("/", methods=["GET"])
+def index():
+    return jsonify({"status": "ok", "service": "wb-price-monitor"})
+
+
+@app.route("/price/<article>", methods=["GET"])
+def price_route(article):
+    """JSON-версия, удобна для отладки в браузере/Postman."""
+    price, error = get_competitor_price(article)
+    if price is None:
+        return jsonify({
+            "article": article,
+            "price": None,
+            "error": error or "not_found",
+        }), 404
+
+    return jsonify({
+        "article": article,
+        "price": price,
+        "display": f"{price} \u20bd",
+    })
+
+
+@app.route("/update-prices", methods=["GET"])
+def update_prices_route():
+    """
+    Роут, который реально дёргает widget.js:
+    GET /update-prices?article=<артикул>
+    Ответ — простой текст (widget.js делает response.text()), НЕ JSON.
+    """
+    article = request.args.get("article")
+    if not article:
+        return "Ошибка: не передан параметр article", 400
+
+    price, error = get_competitor_price(article)
+    if price is None:
+        logger.warning(f"Артикул {article}: не удалось получить цену ({error})")
+        return f"Ошибка WB (не удалось получить цену: {error})", 404
+
+    return f"{price} \u20bd"
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
